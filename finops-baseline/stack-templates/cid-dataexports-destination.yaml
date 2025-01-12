@@ -107,6 +107,7 @@ Conditions:
   EmptySourceAccountIds: !Equals [!Ref SourceAccountIds, ""]
   IsDestinationAccount:
     !Equals [!Ref DestinationAccountId, !Ref "AWS::AccountId"]
+  CreateDestinationBucket: !Equals [!Ref UseExistingBucket, "no"]
   IsSourceAccount:
     # it is Source account if it is not a destination or if it is a destination and it is listed in Source Accounts (as the list one).
     # Unfortunately, there no 'Fn::Contains' in Conditions, so we need to request user setting Dest account as the first.
@@ -211,7 +212,7 @@ Resources:
     Type: AWS::S3::Bucket
     Condition: !And
       - IsDestinationAccount
-      - !Equals [!Ref UseExistingBucket, "no"]
+      - CreateDestinationBucket
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
