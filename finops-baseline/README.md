@@ -26,3 +26,15 @@ module "finops_baseline" {
   manage_cur2 = "yes"
   manage_focus = "yes"
 }
+
+## Destroying resources
+
+All resource could be destroyed automatically by Terraform. There are two exceptions:
+
+- Quicksight Subscription termination protection should be disabled before destroying the module.
+
+```shell
+aws quicksight update-account-settings --no-termination-protection-enabled --aws-account-id <account_id> --default-namespace default
+```
+
+- BCM Data Export should be removed manually.

@@ -1,11 +1,11 @@
 output "templates_bucket_id" {
   description = "ID of the S3 bucket containing CloudFormation templates"
-  value       = module.s3-bucket.s3_bucket_id
+  value       = module.templates-bucket.s3_bucket_id
 }
 
 output "templates_bucket_arn" {
   description = "ARN of the S3 bucket containing CloudFormation templates"
-  value       = module.s3-bucket.s3_bucket_arn
+  value       = module.templates-bucket.s3_bucket_arn
 }
 
 output "data_exports_stack_id" {

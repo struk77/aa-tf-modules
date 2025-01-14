@@ -7,7 +7,7 @@ Metadata:
           default: "Common Parameters Configuration"
         Parameters:
           - DestinationAccountId
-          - UseExistingBucket
+          - DestinationS3
           - ResourcePrefix
           - ManageCUR2
           - ManageFOCUS
@@ -16,6 +16,7 @@ Metadata:
           default: "Parameters needed in Destination (Data Collection) Account only"
         Parameters:
           - SourceAccountIds
+          - SourceS3
       - Label:
           default: "Technical Parameters. Please do not change."
         Parameters:
@@ -49,11 +50,10 @@ Parameters:
     Type: String
     Description: "AWS Account Id where DataExport will be replicated to (Where you deploy CID Quicksight Dashboards or Data Collection)"
     AllowedPattern: '\d{12}'
-  UseExistingBucket:
+  DestinationS3:
     Type: String
-    Description: "Use existing S3 Bucket for Data Export"
-    AllowedValues: ["yes", "no"]
-    Default: "no"
+    Description: "S3 bucket where data will be aggregated"
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
   ResourcePrefix:
     Type: String
     Default: "cid"
@@ -84,6 +84,10 @@ Parameters:
     AllowedPattern: "^((\\d{12})\\,?)*$"
     Default: ""
     Description: "Ex:  12345678912,98745612312,.... If you install all in the same account (Source=Destination) please put Destination Account Id first in the list. "
+  SourceS3:
+    Type: String
+    Description: "S3 bucket where data will be aggregated"
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
 
   ##
   # Technical params
@@ -107,7 +111,6 @@ Conditions:
   EmptySourceAccountIds: !Equals [!Ref SourceAccountIds, ""]
   IsDestinationAccount:
     !Equals [!Ref DestinationAccountId, !Ref "AWS::AccountId"]
-  CreateDestinationBucket: !Equals [!Ref UseExistingBucket, "no"]
   IsSourceAccount:
     # it is Source account if it is not a destination or if it is a destination and it is listed in Source Accounts (as the list one).
     # Unfortunately, there no 'Fn::Contains' in Conditions, so we need to request user setting Dest account as the first.
@@ -208,181 +211,6 @@ Resources:
   # Destination Account Resources
   ###########################################################################
 
-  DestinationS3:
-    Type: AWS::S3::Bucket
-    Condition: !And
-      - IsDestinationAccount
-      - CreateDestinationBucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketName: !Sub "${ResourcePrefix}-${AWS::AccountId}-data-exports"
-
-      ## Uncomment following lines to enable bucket logging if needed. Please be careful with the cost of logging.
-      # LoggingConfiguration:
-      #   DestinationBucketName: REPLACE_WITH_YOUR_LOGGING_BUCKET
-      #   LogFilePrefix: REPLACE_WITH_YOUR_PREFIX
-
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256 ## Use AWS managed KMS
-              ## If you need Customer managed KMS key, yoy can do that using following parameters:
-              # SSEAlgorithm: aws:kms
-              # KMSMasterKeyID: "REPLACE_WITH_YOUR_KEY_ARN"
-      AccessControl: BucketOwnerFullControl
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: Object&Version Expiration
-            Status: Enabled
-            NoncurrentVersionExpirationInDays: 32 # 1 month
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: "W35"
-            reason: "Data buckets would generate too much logs"
-      cfn-lint:
-        config:
-          ignore_checks:
-            - W3045 # Need to use AccessControl for replication
-
-  DestinationS3BucketPolicy:
-    Type: "AWS::S3::BucketPolicy"
-    Condition: IsDestinationAccount
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Delete
-    Properties:
-      Bucket:
-        Ref: DestinationS3
-      PolicyDocument:
-        Id: AllowReplication
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowTLS12Only
-            Effect: Deny
-            Principal: "*"
-            Action: s3:*
-            Resource:
-              - !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}"
-              - !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}/*"
-            Condition:
-              NumericLessThan:
-                s3:TlsVersion: 1.2
-          - Sid: AllowOnlyHTTPS
-            Effect: Deny
-            Principal: "*"
-            Action: s3:*
-            Resource:
-              - !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}"
-              - !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}/*"
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-          - Sid: AllowReplicationWrite
-            Effect: Allow
-            Principal:
-              AWS:
-                Fn::If:
-                  - EmptySourceAccountIds
-                  - !Ref AWS::AccountId
-                  - !Split [",", !Ref SourceAccountIds]
-            Action:
-              - s3:ReplicateDelete
-              - s3:ReplicateObject
-            Resource: !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}/*"
-          - Sid: AllowReplicationRead
-            Effect: Allow
-            Principal:
-              AWS:
-                Fn::If:
-                  - EmptySourceAccountIds
-                  - !Ref AWS::AccountId
-                  - !Split [",", !Ref SourceAccountIds]
-            Action:
-              - s3:ListBucket
-              - s3:ListBucketVersions
-              - s3:GetBucketVersioning
-              - s3:PutBucketVersioning
-            Resource: !Sub "arn:${AWS::Partition}:s3:::${DestinationS3}"
-
-  SourceS3:
-    Type: AWS::S3::Bucket
-    Condition: DeployDataExport
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      BucketName: !Sub ${ResourcePrefix}-${AWS::AccountId}-data-local
-
-      ## Uncomment following lines to enable bucket logging if needed. Please be careful with the cost of logging.
-      # LoggingConfiguration:
-      #   DestinationBucketName: REPLACE_WITH_YOUR_LOGGING_BUCKET
-      #   LogFilePrefix: REPLACE_WITH_YOUR_PREFIX
-
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256 ## Use AWS managed KMS
-              ## If you need Customer managed KMS key, yoy can do that using following parameters:
-              # SSEAlgorithm: aws:kms
-              # KMSMasterKeyID: "REPLACE_WITH_YOUR_KEY_ARN"
-      AccessControl: BucketOwnerFullControl
-      OwnershipControls:
-        Rules:
-          - ObjectOwnership: BucketOwnerEnforced
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      VersioningConfiguration:
-        Status: Enabled
-      ReplicationConfiguration:
-        Role: !GetAtt ReplicationRole.Arn
-        Rules:
-          - Destination:
-              Bucket: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${DestinationAccountId}-data-exports"
-              StorageClass: STANDARD
-            Id: ReplicateCUR2Data
-            Prefix: !Sub "cur2/${AWS::AccountId}/${ResourcePrefix}-cur2/data/" # Hardcoded export name
-            Status: Enabled
-          - Destination:
-              Bucket: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${DestinationAccountId}-data-exports"
-              StorageClass: STANDARD
-            Id: ReplicateFOCUSData
-            Prefix: !Sub "focus/${AWS::AccountId}/${ResourcePrefix}-focus/data/" # Hardcoded export name
-            Status: Enabled
-          - Destination:
-              Bucket: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${DestinationAccountId}-data-exports"
-              StorageClass: STANDARD
-            Id: ReplicateCOHData
-            Prefix: !Sub "coh/${AWS::AccountId}/${ResourcePrefix}-coh/data/" # Hardcoded export name
-            Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: Object&Version Expiration
-            Status: Enabled
-            NoncurrentVersionExpirationInDays: 32 # 1 month
-            ExpirationInDays: 64 # 2 months
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: "W35"
-            reason: "Data buckets would generate too much logs"
-      cfn-lint:
-        config:
-          ignore_checks:
-            - W3045 # Need to use AccessControl for replication
-
   SourceS3BucketPolicy:
     Type: "AWS::S3::BucketPolicy"
     Condition: DeployDataExport
@@ -428,43 +256,6 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
-
-  ReplicationRole:
-    Condition: DeployDataExport
-    Type: AWS::IAM::Role
-    Properties:
-      Path: !Sub /${ResourcePrefix}/
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - "s3.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
-      Policies:
-        - PolicyName: ReplicationPolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetReplicationConfiguration
-                  - s3:ListBucket
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${AWS::AccountId}-data-local"
-              - Effect: Allow
-                Action:
-                  - s3:GetObjectVersionForReplication
-                  - s3:GetObjectVersionAcl
-                  - s3:GetObjectVersionTagging
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${AWS::AccountId}-data-local/*"
-              - Effect: Allow
-                Action:
-                  - s3:ReplicateObject
-                  - s3:ReplicateDelete
-                  - s3:ReplicateTags
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${ResourcePrefix}-${DestinationAccountId}-data-exports/*/${AWS::AccountId}/*"
 
   # CUR2
 
@@ -601,8 +392,8 @@ Resources:
     Type: AWS::BCMDataExports::Export
     Condition: DeployCOHViaCFN
     DependsOn:
-      - SourceS3BucketPolicy
       - CreateServiceLinkedRoleCustomResource
+      - SourceS3BucketPolicy
     Properties:
       Export:
         DataQuery:
