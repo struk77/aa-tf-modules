@@ -32,3 +32,8 @@ output "account_name" {
   description = "AWS Account Name"
   value       = var.account_name
 }
+
+output "quicksight_admin_email" {
+  description = "Email address of the Quicksight admin user"
+  value       = var.quicksight_admin_email
+}
