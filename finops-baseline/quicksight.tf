@@ -1,5 +1,5 @@
 resource "aws_quicksight_account_subscription" "subscription" {
-  account_name          = var.account_name
+  account_name          = local.account_name
   authentication_method = "IAM_AND_QUICKSIGHT"
   edition               = "ENTERPRISE"
   notification_email    = var.quicksight_admin_email
@@ -7,7 +7,7 @@ resource "aws_quicksight_account_subscription" "subscription" {
 
 resource "aws_quicksight_namespace" "namespace" {
   depends_on = [aws_quicksight_account_subscription.subscription]
-  namespace  = var.account_name
+  namespace  = local.account_name
 }
 
 resource "aws_quicksight_user" "dashboards_user" {

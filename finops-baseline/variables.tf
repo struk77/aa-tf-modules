@@ -11,21 +11,11 @@ variable "tags" {
   }
 }
 
-variable "account_name" {
-  description = "AWS Account Name"
-  type        = string
-}
-
 # Dataexports Destination Variables
 variable "cid-dataexports-destination-stack-name" {
   description = "CloudFormation Stack Name"
   type        = string
   default     = "CID-DataExports-Destination"
-}
-
-variable "destination_account_id" {
-  description = "Destination (Data Collection) Account ID"
-  type        = string
 }
 
 variable "enable_scad" {
@@ -62,11 +52,6 @@ variable "role_path" {
   description = "Path for IAM roles"
   type        = string
   default     = "/"
-}
-
-variable "source_account_ids" {
-  description = "Comma-separated list of source account IDs"
-  type        = string
 }
 
 variable "time_granularity" {

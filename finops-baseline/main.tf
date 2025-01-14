@@ -1,5 +1,6 @@
 locals {
   account_id                          = data.aws_caller_identity.current.account_id
+  account_name                        = data.aws_iam_account_alias.current.account_alias
   template_name                       = "data-exports-aggregation.yaml"
   templates_bucket_name               = "${var.resource_prefix}-${local.account_id}-templates-bucket"
   dataexports_destination_bucket_name = "${var.resource_prefix}-${local.account_id}-data-exports"
