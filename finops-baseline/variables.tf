@@ -65,3 +65,7 @@ variable "quicksight_admin_email" {
   type        = string
 }
 
+variable "account_name" {
+  description = "Account name (Alias)"
+  default     = null
+}

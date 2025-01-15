@@ -30,7 +30,7 @@ output "account_id" {
 
 output "account_name" {
   description = "AWS Account Name"
-  value       = data.aws_iam_account_alias.current.account_alias
+  value       = local.account_name
 }
 
 output "quicksight_admin_email" {
